@@ -14,6 +14,7 @@ from aws_cdk import (
     aws_ecs_patterns as ecs_patterns,
     aws_applicationautoscaling as appscaling,
     aws_logs as logs,
+    aws_mediaconvert as mediaconvert,
 )
 
 
@@ -69,6 +70,9 @@ class CdkStack(Stack):
         task_definition.task_role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("AmazonS3FullAccess")
         )
+        task_definition.task_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("AWSElementalMediaConvertFullAccess")
+        )
 
         # スケジュールに基づいてECSタスクを実行
         scheduled_ecs_task = ecs_patterns.ScheduledEc2Task(self, "ScheduledEc2Task",
@@ -80,3 +84,70 @@ class CdkStack(Stack):
             desired_task_count=1  # 実行するタスクの数
         )
 
+
+        # MediaConvert用
+        # MediaConvert settings
+        thumnail_json = {
+            'Extension': 'jpg',
+            'NameModifier': '_thumbnail1',
+            'ContainerSettings': {
+                'Container': 'RAW'
+            },
+            'VideoDescription': {
+                'CodecSettings': {
+                    'Codec': 'FRAME_CAPTURE',
+                    'FrameCaptureSettings': {
+                        'FramerateNumerator': 1,
+                        'FramerateDenominator': 2,
+                        'MaxCaptures': 11,
+                    }
+                },
+            }
+        }
+        
+        movie_json = {
+            'ContainerSettings': {
+                'Container': 'MOV',
+                'MovSettings': {}
+            },
+            'VideoDescription': {
+                'CodecSettings': {
+                    'Codec': 'H_264',
+                    'H264Settings': {
+                        'MaxBitrate': 1000000,
+                        'RateControlMode': 'QVBR'
+                    }
+                }
+            },
+            'AudioDescriptions': [
+                {
+                    'AudioSourceName': 'Audio Selector 1',
+                    'CodecSettings': {
+                        'Codec': 'AAC',
+                        'AacSettings': {
+                            'SampleRate': 48000,
+                            'CodingMode': 'CODING_MODE_2_0',
+                        }
+                    }
+                }
+            ]
+        }
+
+        # Create a MediaConvert Job Template
+        mediaconvert.CfnJobTemplate(
+            self, 'MediaConvertJobTemplate',
+            name='MyJobTemplate',
+            description='Job template to create thumbnails',
+            settings_json={
+                'OutputGroups': [
+                    {
+                        'Name': 'File Group',
+                        'OutputGroupSettings': {
+                            'Type': 'FILE_GROUP_SETTINGS',
+                            'FileGroupSettings': {}
+                        },
+                        'Outputs': [thumnail_json, movie_json]
+                    }
+                ]
+            }
+        )

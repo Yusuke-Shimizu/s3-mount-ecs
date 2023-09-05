@@ -52,12 +52,17 @@ class CdkStack(Stack):
         # EC2タスク定義の作成
         task_definition = ecs.Ec2TaskDefinition(self, "TaskDef")
         
-        # コンテナを特権モードで追加
+        # MediaConvert Job Template Name as a variable
+        media_convert_job_template_name = 'MyJobTemplate'
+        media_convert_job_role_name = "poc_media_role"
+
         task_definition.add_container("AppContainer",
             image=ecs.ContainerImage.from_docker_image_asset(docker_image),
             memory_limit_mib=512,
             environment={
-                'BUCKET_NAME': bucket.bucket_name  # 環境変数にS3バケット名を設定
+                'BUCKET_NAME': bucket.bucket_name,  # 環境変数にS3バケット名を設定
+                'MEDIA_CONVERT_JOB_TEMPLATE': media_convert_job_template_name,  # MediaConvertのジョブテンプレート名を環境変数に設定
+                'MEDIA_CONVERT_JOB_ROLE': media_convert_job_role_name,
             },
             logging=ecs.LogDriver.aws_logs(
                 stream_prefix="ScheduledEc2Task",
@@ -86,6 +91,19 @@ class CdkStack(Stack):
 
 
         # MediaConvert用
+        # Create Media Role
+        media_role = iam.Role(
+            self,
+            id=media_convert_job_role_name,
+            role_name=media_convert_job_role_name,
+            assumed_by=iam.ServicePrincipal("mediaconvert.amazonaws.com"),
+        )
+        media_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name(
+                managed_policy_name="AmazonS3FullAccess"
+            )
+        )
+
         # MediaConvert settings
         thumnail_json = {
             'Extension': 'jpg',
@@ -136,7 +154,7 @@ class CdkStack(Stack):
         # Create a MediaConvert Job Template
         mediaconvert.CfnJobTemplate(
             self, 'MediaConvertJobTemplate',
-            name='MyJobTemplate',
+            name=media_convert_job_template_name,
             description='Job template to create thumbnails',
             settings_json={
                 'OutputGroups': [

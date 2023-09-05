@@ -41,3 +41,6 @@ def prune(c):
     invoke.run("docker system prune -a -f", pty=True,)
     invoke.run("df -h | grep /dev/nvm", pty=True,)
 
+@invoke.task
+def rule(c):
+    invoke.run("python3 scripts/toggle_eventbridge_rule.py", pty=True,)
